@@ -1,122 +1,176 @@
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
+import 'package:just_audio/just_audio.dart';
+import 'pages/audio_detail_page.dart'; // make sure this file exists
 
-void main() {
-  runApp(const MyApp());
+void main() => runApp(MyApp());
+
+class MyApp extends StatefulWidget {
+  @override
+  State<MyApp> createState() => _MyAppState();
 }
 
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+class _MyAppState extends State<MyApp> {
+  final player = AudioPlayer();
+  List<dynamic> audioList = [];
+  bool isLoading = true;
+  int? currentIndex;
 
-  // This widget is the root of your application.
+  // Your IPv4 address
+  String IPV4_Adress = "192.168.137.1";
+
+  @override
+  void initState() {
+    super.initState();
+    fetchAudioData();
+  }
+
+  Future<void> fetchAudioData() async {
+    try {
+      final response = await http
+          .get(Uri.parse('http://$IPV4_Adress:5000/api/audio'))
+          .timeout(const Duration(seconds: 10));
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+
+        // ✅ Print only audio_file_path for each item
+        for (var item in data) {
+          print("AUDIO FILE PATH: ${item['audio_file_path']}");
+        }
+
+        setState(() {
+          audioList = data;
+          isLoading = false;
+        });
+      } else {
+        throw Exception('Failed to load data');
+      }
+    } catch (e) {
+      print('Error fetching audio data: $e');
+      setState(() => isLoading = false);
+    }
+  }
+
+
+  Future<void> togglePlayPause(String url, int index) async {
+    try {
+      if (currentIndex == index && player.playing) {
+        await player.pause();
+      } else {
+        await player.setUrl(url);
+        await player.play();
+        setState(() {
+          currentIndex = index;
+        });
+      }
+    } catch (e) {
+      print('Error playing audio: $e');
+    }
+  }
+
+  String formatTime(Duration d) {
+    String twoDigits(int n) => n.toString().padLeft(2, '0');
+    final minutes = twoDigits(d.inMinutes.remainder(60));
+    final seconds = twoDigits(d.inSeconds.remainder(60));
+    return "$minutes:$seconds";
+  }
+
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Flutter Demo',
-      theme: ThemeData(
-        // This is the theme of your application.
-        //
-        // TRY THIS: Try running your application with "flutter run". You'll see
-        // the application has a purple toolbar. Then, without quitting the app,
-        // try changing the seedColor in the colorScheme below to Colors.green
-        // and then invoke "hot reload" (save your changes or press the "hot
-        // reload" button in a Flutter-supported IDE, or press "r" if you used
-        // the command line to start the app).
-        //
-        // Notice that the counter didn't reset back to zero; the application
-        // state is not lost during the reload. To reset the state, use hot
-        // restart instead.
-        //
-        // This works for code too, not just values: Most code changes can be
-        // tested with just a hot reload.
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
-      ),
-      home: const MyHomePage(title: 'Flutter Demo Home Page'),
-    );
-  }
-}
+      debugShowCheckedModeBanner: false,
+      home: Scaffold(
+        appBar: AppBar(title: const Text('VoxPulse JustAudio Player')),
+        body: isLoading
+            ? const Center(child: CircularProgressIndicator())
+            : StreamBuilder<PlayerState>(
+          stream: player.playerStateStream,
+          builder: (context, snapshot) {
+            final state = snapshot.data;
+            final playing = state?.playing ?? false;
 
-class MyHomePage extends StatefulWidget {
-  const MyHomePage({super.key, required this.title});
+            return ListView.builder(
+              itemCount: audioList.length,
+              itemBuilder: (context, index) {
+                final item = audioList[index];
+                final isThisPlaying = currentIndex == index && playing;
 
-  // This widget is the home page of your application. It is stateful, meaning
-  // that it has a State object (defined below) that contains fields that affect
-  // how it looks.
-
-  // This class is the configuration for the state. It holds the values (in this
-  // case the title) provided by the parent (in this case the App widget) and
-  // used by the build method of the State. Fields in a Widget subclass are
-  // always marked "final".
-
-  final String title;
-
-  @override
-  State<MyHomePage> createState() => _MyHomePageState();
-}
-
-class _MyHomePageState extends State<MyHomePage> {
-  int _counter = 0;
-
-  void _incrementCounter() {
-    setState(() {
-      // This call to setState tells the Flutter framework that something has
-      // changed in this State, which causes it to rerun the build method below
-      // so that the display can reflect the updated values. If we changed
-      // _counter without calling setState(), then the build method would not be
-      // called again, and so nothing would appear to happen.
-      _counter++;
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    // This method is rerun every time setState is called, for instance as done
-    // by the _incrementCounter method above.
-    //
-    // The Flutter framework has been optimized to make rerunning build methods
-    // fast, so that you can just rebuild anything that needs updating rather
-    // than having to individually change instances of widgets.
-    return Scaffold(
-      appBar: AppBar(
-        // TRY THIS: Try changing the color here to a specific color (to
-        // Colors.amber, perhaps?) and trigger a hot reload to see the AppBar
-        // change color while the other colors stay the same.
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-        // Here we take the value from the MyHomePage object that was created by
-        // the App.build method, and use it to set our appbar title.
-        title: Text(widget.title),
-      ),
-      body: Center(
-        // Center is a layout widget. It takes a single child and positions it
-        // in the middle of the parent.
-        child: Column(
-          // Column is also a layout widget. It takes a list of children and
-          // arranges them vertically. By default, it sizes itself to fit its
-          // children horizontally, and tries to be as tall as its parent.
-          //
-          // Column has various properties to control how it sizes itself and
-          // how it positions its children. Here we use mainAxisAlignment to
-          // center the children vertically; the main axis here is the vertical
-          // axis because Columns are vertical (the cross axis would be
-          // horizontal).
-          //
-          // TRY THIS: Invoke "debug painting" (choose the "Toggle Debug Paint"
-          // action in the IDE, or press "p" in the console), to see the
-          // wireframe for each widget.
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: <Widget>[
-            const Text('You have pushed the button this many times:'),
-            Text(
-              '$_counter',
-              style: Theme.of(context).textTheme.headlineMedium,
-            ),
-          ],
+                return Card(
+                  margin: const EdgeInsets.all(8),
+                  child: Padding(
+                    padding: const EdgeInsets.all(8.0),
+                    child: Column(
+                      children: [
+                        ListTile(
+                          title: Text(item['title']),
+                          subtitle: Text(item['category'] ?? ''),
+                          onTap: () {
+                            // Navigate to the detail page
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => AudioDetailPage(
+                                  item: item,
+                                  ipv4Address: IPV4_Adress,
+                                ),
+                              ),
+                            );
+                          },
+                          trailing: IconButton(
+                            icon: Icon(
+                              isThisPlaying
+                                  ? Icons.pause
+                                  : Icons.play_arrow,
+                              color: Colors.blue,
+                            ),
+                            onPressed: () => togglePlayPause(
+                                item['audio_file_path'], index),
+                          ),
+                        ),
+                        if (isThisPlaying)
+                          StreamBuilder<Duration>(
+                            stream: player.positionStream,
+                            builder: (context, posSnapshot) {
+                              final position =
+                                  posSnapshot.data ?? Duration.zero;
+                              final total =
+                                  player.duration ?? Duration.zero;
+                              return Column(
+                                children: [
+                                  Slider(
+                                    min: 0,
+                                    max: total.inSeconds.toDouble(),
+                                    value: position.inSeconds
+                                        .clamp(0, total.inSeconds)
+                                        .toDouble(),
+                                    onChanged: (v) {
+                                      player.seek(
+                                          Duration(seconds: v.toInt()));
+                                    },
+                                  ),
+                                  Row(
+                                    mainAxisAlignment:
+                                    MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      Text(formatTime(position)),
+                                      Text(formatTime(total)),
+                                    ],
+                                  ),
+                                ],
+                              );
+                            },
+                          ),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            );
+          },
         ),
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _incrementCounter,
-        tooltip: 'Increment',
-        child: const Icon(Icons.add),
-      ), // This trailing comma makes auto-formatting nicer for build methods.
     );
   }
 }
